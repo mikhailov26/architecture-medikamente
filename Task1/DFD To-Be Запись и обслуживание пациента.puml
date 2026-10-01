@@ -1,0 +1,42 @@
+@startuml
+title DFD To-Be: Запись и обслуживание пациента (с защитой данных)
+
+skinparam defaultFontName Arial
+
+actor "Пациент (портал)" as Patient
+
+rectangle "Запись на приём\n(ресепшен)\n[tags: PII,PHI]" as P1
+
+rectangle "Ведение медкарты\n(врач)\n[tags: PHI]" as P2
+
+rectangle "Mask PII/PHI for Logs\n[MASK, MASK_IN_LOGS]" as MaskLogs #LightGray
+
+database "Журнал записей\n(Excel / БД)\n[tags: PII, NO_EXPORT]\n[encrypt: at rest]" as D1 #Blue
+
+database "Медкарты\n(БД/документы)\n[tags: PII,PHI, NO_EXPORT]\n[encrypt: at rest]" as D2 #Red
+
+database "Анкеты пациента\n(БД/документы)\n[tags: PII,PHI, NO_EXPORT]\n[encrypt: at rest]" as D3 #Red
+
+' Потоки от пациента к системам
+Patient -[#Blue]-> P1 : HTTPS/TLS\nАнкетные данные\nPII + часть PHI
+Patient -[#Red]-> P2 : HTTPS/TLS\nЖалобы, анамнез (PHI)
+
+' Запись и анкеты
+P1 -[#Blue]-> D1 : PII\nФИО, телефон, дата, врач
+P1 -[#Red]-> D3 : PII+PHI\nадрес, работа/учёба,\nхронические заболевания
+
+' Медкарта и обновлённая анкета
+P2 -[#Red]-> D2 : PHI\nдиагнозы, назначения,\nрезультаты анализов
+P2 -[#Red]-> D3 : PII+PHI\nобновлённая анкета/история
+
+' Логирование с маскированием
+P1 -[#Gray,dashed]-> MaskLogs : события\n[tags: PII,PHI,MASK_IN_LOGS]
+P2 -[#Gray,dashed]-> MaskLogs : события\n[tags: PHI,MASK_IN_LOGS]
+
+note right of MaskLogs
+MASK: маскирование PII/PHI
+MASK_IN_LOGS: логируем только
+обезличенные данные
+end note
+
+@enduml

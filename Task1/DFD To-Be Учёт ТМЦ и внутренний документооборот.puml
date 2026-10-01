@@ -1,0 +1,61 @@
+@startuml
+title DFD To-Be: Учёт ТМЦ и внутренний документооборот (с защитой данных)
+
+skinparam defaultFontName Arial
+
+actor "Поставщик" as Supplier
+actor "Налоговая / контролирующие органы" as Tax
+
+rectangle "Учёт ТМЦ\n(1С:Торговля и склад)\n[tags: FIN]" as P5
+
+rectangle "Бухгалтерский учёт\n(1С:Бухгалтерия)\n[tags: FIN,PII]" as P6
+
+rectangle "Обмен документами\n(внутри контура)\n[tags: PII,FIN]" as P7
+
+rectangle "DLP Control\n[проверка PII/PHI/FIN]\nблокировка/алерт" as DLP #LightGray
+
+database "1С:Торговля и склад\n(файловая/БД)\n[tags: FIN]\n[encrypt: at rest]" as D7 #Orange
+
+database "1С:Бухгалтерия\n(файловая/БД)\n[tags: FIN,PII]\n[encrypt: at rest]" as D5 #Orange
+
+database "SecureDocs\n(зашифрованный архив\nдоговоров, накладных,\nотчётов)\n[tags: PII,PHI,FIN, NO_EXPORT]\n[encrypt: at rest]" as SecureDocs #Red
+
+database "CommonDocs\n(общие документы\nбез ПДн)\n[tags: INTERNAL]" as CommonDocs
+
+database "Почтовый сервер\n(Exchange)\n[tags: PII,FIN]\n[audit enabled]" as D9 #Blue
+
+' Поток от поставщика
+Supplier -[#Orange]-> P5 : Накладные, счета, договоры\n(FIN+PII контрагентов)
+
+P5 -[#Orange]-> D7 : Учёт ТМЦ,\nдвижения по складу
+D7 -[#Orange]-> P5
+
+' Интеграция 1С–1С
+P5 -[#Orange]-> P6 : Информация о закупках\n(защищённый канал)
+P6 -[#Orange]-> D5 : Проводки, платежи,\nдоговоры (FIN+PII)
+D5 -[#Orange]-> P6
+
+' Внутренние документы -> SecureDocs/CommonDocs
+P5 -[#Orange]-> P7 : Документы по ТМЦ\n(FIN+PII)
+P6 -[#Orange]-> P7 : Финансовые документы\n(FIN+PII)
+
+P7 -[#Orange]-> SecureDocs : Сканы накладных,\nдоговоров, отчёты\n(зашифровано, NO_EXPORT)
+P7 -[#Black]-> CommonDocs : Обезличенные/общие\nдокументы (без ПДн)
+
+' Отправка наружу с DLP
+SecureDocs -[#Orange]-> DLP : Попытка отправки\nнаружу (почта/внешний ресурс)
+CommonDocs -[#Black]-> D9 : Отправка внутренних\nдокументов по почте
+
+DLP -[#Orange]-> D9 : Разрешённые\n(очищенные/агрегированные)\nдокументы
+DLP -[#Red,dashed]-> Supplier : Блокировка/алерт\nесли найден PII/PHI/FIN
+
+' Отчётность
+P6 -[#Orange]-> Tax : Отчётность\nфинансовые данные\n(минимум PII)
+
+note right of SecureDocs
+tags: PII, PHI, FIN, NO_EXPORT
+Зашифрованное хранилище
+чувствительных документов
+end note
+
+@enduml

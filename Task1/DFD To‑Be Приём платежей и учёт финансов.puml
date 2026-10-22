@@ -1,0 +1,52 @@
+@startuml
+title DFD To-Be: Приём платежей и учёт финансов (с защитой данных)
+
+skinparam defaultFontName Arial
+
+actor "Пациент" as Patient
+actor "Банк / Эквайер" as Bank
+actor "Налоговая / ФНС" as Tax
+
+rectangle "Приём оплаты\n(кассир, ККМ)\n[tags: FIN,PII]" as P3
+
+rectangle "Учёт платежей\n(фин. модуль / 1С)\n[tags: FIN,PII]" as P4
+
+rectangle "Mask FIN for Reports\n[MASK, MASK_IN_LOGS]" as MaskFin #LightGray
+
+database "ККМ / фискальная память\n(логи чеков)\n[tags: FIN,PII]\n[encrypt: at rest]" as D4 #Orange
+
+database "Финансовая БД\n(1С / биллинг)\n[tags: FIN,PII, NO_EXPORT,\nMASK_IN_LOGS]\n[encrypt: at rest]" as D5 #Orange
+
+database "Журнал платежей\n(БД/Excel)\n[tags: FIN,PII]\n[encrypt: at rest]" as D6 #Orange
+
+' Пациент -> ККМ
+Patient -[#Orange]-> P3 : Данные оплаты\n(TLS/VPN)\nсумма, способ, иногда PII
+
+' ККМ -> фискальная память
+P3 -[#Orange]-> D4 : Чек, фискальные данные\n(сумма, дата, номер, PII?)
+
+' ККМ -> учёт платежей
+P3 -[#Orange]-> P4 : Информация о платеже\n(защищённый канал)
+
+' Учёт платежей <-> фин. БД
+P4 -[#Orange]-> D5 : Проводки, счета,\nдоговоры (FIN+PII)
+D5 -[#Orange]-> P4
+
+' Журнал платежей (оперативный)
+P3 -[#Orange]-> D6 : Журнал платежей\nФИО, услуга, сумма, дата\n(FIN+PII)
+
+' Маскирование перед отчётами
+P4 -[#Orange]-> MaskFin : сырые данные по платежам\n(FIN+PII)
+MaskFin -[#Orange]-> Tax : Отчётность\nагрегированные фин. данные\n(минимум PII)
+
+' Банк/эквайер
+P3 -[#Orange]-> Bank : Авторизация/платёж\n(TLS/VPN)
+
+note right of D5
+FIN: финансовые данные
+NO_EXPORT: нельзя выгружать
+MASK_IN_LOGS: маскировать реквизиты
+в логах и отчётах
+end note
+
+@enduml

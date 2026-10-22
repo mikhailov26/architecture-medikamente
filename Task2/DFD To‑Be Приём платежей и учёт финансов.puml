@@ -1,0 +1,122 @@
+@startuml
+title C4 Container View – "Медикаменте" с Privacy by Design (упрощённо)
+
+skinparam defaultFontName Arial
+
+' Люди
+actor "Пациент" as Patient
+actor "Сотрудник ресепшена" as Reception
+actor "Врач" as Doctor
+actor "Кассир" as Cashier
+actor "Бухгалтер" as Accountant
+actor "Бизнес‑аналитик" as Analyst
+actor "IT/Безопасность" as IT
+
+rectangle "Система «Медикаменте»" as MedSystem {
+
+  ' Операционные приложения
+  rectangle "Портал / мобильное приложение пациента\n(Container: patientPortal)" as patientPortal
+  rectangle "Портал ресепшена\n(Container: receptionPortal)" as receptionPortal
+  rectangle "EMR / Медицинский модуль\n(Container: emrSystem)" as emrSystem
+  rectangle "CRM / Клиентский модуль\n(Container: crmSystem)" as crmSystem
+  rectangle "Платёжный модуль / биллинг\n(Container: billingSystem)" as billingSystem
+  rectangle "Контур 1С (переходный)\n(Container: ext1C)" as ext1C
+
+  ' Privacy & Governance Layer
+  rectangle "Data Catalog & Classification Service\n(Container: dataCatalog)" as dataCatalog
+  rectangle "Policy Engine (RBAC/ABAC)\n(Container: policyEngine)" as policyEngine
+  rectangle "Consent & Subject Rights Service\n(Container: consentService)" as consentService
+
+  ' Security & Privacy Enforcement Layer
+  rectangle "Encryption / Tokenization Service\n(Container: encService)" as encService
+  rectangle "Masking & Anonymization Service\n(Container: maskAnonService)" as maskAnonService
+  rectangle "Audit & Access Logging Service\n(Container: auditService)" as auditService
+  rectangle "DLP / Egress Gateway\n(Container: dlpGateway)" as dlpGateway
+
+  ' Identity & Access
+  rectangle "IAM / IdP\n(Container: iam)" as iam
+
+  ' Data & Analytics Layer
+  rectangle "ODS – операционные хранилища\n(Container: ods)" as ods
+  rectangle "Anonymization & ETL Service\n(Container: anonETL)" as anonETL
+  rectangle "Anonymized Analytics Store / Data Lake\n(Container: anonStore)" as anonStore
+  rectangle "BI / ML / AI Platform\n(Container: biMl)" as biMl
+}
+
+' Взаимодействие людей с контейнерами
+Patient --> patientPortal : запись, просмотр данных\n(HTTPS/TLS)
+Reception --> receptionPortal
+Doctor --> emrSystem
+Cashier --> billingSystem
+Accountant --> billingSystem
+Analyst --> biMl
+IT --> auditService
+
+' Аутентификация
+patientPortal --> iam : OAuth2/OIDC, MFA
+receptionPortal --> iam
+emrSystem --> iam
+crmSystem --> iam
+billingSystem --> iam
+
+iam --> policyEngine : атрибуты пользователя (роль, отдел)
+
+' Policy Engine
+patientPortal --> policyEngine : проверка прав на данные пациента
+receptionPortal --> policyEngine
+emrSystem --> policyEngine
+crmSystem --> policyEngine
+billingSystem --> policyEngine
+biMl --> policyEngine : доступ к отчётам
+
+' Consent
+patientPortal --> consentService : согласие/отзыв/запрос на удаление
+consentService --> emrSystem : удалить/ограничить PHI
+consentService --> crmSystem : удалить/ограничить PII
+consentService --> billingSystem : учесть ограничения по FIN
+
+' Data Catalog
+emrSystem --> dataCatalog : регистрация схем, PHI
+crmSystem --> dataCatalog : регистрация PII
+billingSystem --> dataCatalog : регистрация FIN
+ods --> dataCatalog : использование тегов/политик
+anonETL --> dataCatalog : запрос тегов (ANONYMIZE_FOR_BI, NO_EXPORT)
+
+' Шифрование / токенизация
+patientPortal --> encService : шифрование/дешифрование PII/PHI
+emrSystem --> encService
+crmSystem --> encService
+billingSystem --> encService
+
+' Маскирование / обезличивание
+patientPortal --> maskAnonService : маскирование в UI
+receptionPortal --> maskAnonService
+emrSystem --> maskAnonService : обезличивание перед аналитикой
+billingSystem --> maskAnonService : маскирование реквизитов
+anonETL --> maskAnonService : обезличивание для Data Lake
+
+' Аудит
+patientPortal --> auditService
+receptionPortal --> auditService
+emrSystem --> auditService
+crmSystem --> auditService
+billingSystem --> auditService
+anonETL --> auditService
+biMl --> auditService
+
+' DLP / выход наружу
+patientPortal --> dlpGateway : файлы/письма наружу
+receptionPortal --> dlpGateway
+emrSystem --> dlpGateway
+billingSystem --> dlpGateway
+
+' Аналитический слой
+emrSystem --> ods
+crmSystem --> ods
+billingSystem --> ods
+
+anonETL --> ods
+anonETL --> anonStore
+biMl --> anonStore
+
+@enduml
